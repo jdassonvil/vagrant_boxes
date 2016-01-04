@@ -1,0 +1,168 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+Vagrant.configure(2) do |config|
+
+  # base box
+  config.vm.box = "puppetlabs/centos-7.0-64-puppet"
+
+  # ssh config  
+  config.vm.synced_folder "ssh/", "/srv/ssh" 
+  config.vm.synced_folder "shared/", "/home/vagrant/shared" 
+  config.ssh.forward_agent = true 
+
+  # ports forwarded to host
+  # ports = [3000,3010,3020,3025,3030,3035,3040,3045,3050,3055,3060,3065,6379,27017]
+    ports = []
+
+  for p in ports
+	config.vm.network :forwarded_port, guest:p, host:p
+  end
+
+  #proxy
+
+  if Vagrant.has_plugin?("vagrant-proxyconf")
+    config.proxy.http     = "http://proxy.priv.atos.fr:3128"
+    config.proxy.https    = "http://proxy.priv.atos.fr:3128"
+    config.proxy.no_proxy = "localhost,127.0.0.1,.sock,.priv.atos.fr,.qlf-waas.priv.atos.fr"
+  end
+
+  # provision
+  config.vm.provision "shell", inline: <<-SHELL
+
+     #start ssh-agent in bash_profile
+     printf "\n" >> /home/vagrant/.bash_profile
+     printf 'if [ -z "$SSH_AUTH_SOCK" ] ; then\n' >> /home/vagrant/.bash_profile
+     printf '  eval `ssh-agent -s`\n' >> /home/vagrant/.bash_profile
+     printf '  ssh-add\n' >> /home/vagrant/.bash_profile
+     printf 'fi\n' >> /home/vagrant/.bash_profile
+     printf 'alias vi="vim"\n' >> /home/vagrant/.bash_profile
+     printf 'alias mongo="docker exec -ti mongo mongo"\n' >> /home/vagrant/.bash_profile
+     printf 'alias redis-cli="docker exec -ti redis redis-cli\n"' >> /home/vagrant/.bash_profile
+     printf 'alias start_mongo="docker run -d -p 27017:27017 mongo:2.6 --smallfiles \n"' >> /home/vagrant/.bash_profile
+     printf 'alias start_redis="docker run -d -p 6379:6379 redis"' >> /home/vagrant/.bash_profile
+
+     # git config
+     touch /home/vagrant/.gitconfig
+     printf "[user]" >> /home/vagrant/.gitconfig
+     printf "    name = Jerome Dassonville\n" >> /home/vagrant/.gitconfig
+     printf "    email = jerome.dassonville@worldline.com\n" >> /home/vagrant/.gitconfig
+     printf "[color]\n" >> /home/vagrant/.gitconfig
+     printf "    ui = true\n" >> /home/vagrant/.gitconfig
+     printf "[push]\n" >> /home/vagrant/.gitconfig
+     printf "    default = matching\n" >> /home/vagrant/.gitconfig
+     printf "[http]\n" >> /home/vagrant/.gitconfig
+     printf "    postbuffer = 157286400\n" >> /home/vagrant/.gitconfig
+     printf "    sslverify = false\n" >> /home/vagrant/.gitconfig
+     printf "[alias]\n" >> /home/vagrant/.gitconfig
+     printf "    unstash = stash pop\n" >> /home/vagrant/.gitconfig
+     printf "    undo = git reset --soft HEAD^\n" >> /home/vagrant/.gitconfig
+     printf "    amend = commit --amend\n" >> /home/vagrant/.gitconfig
+     chown vagrant /home/vagrant/.gitconfig
+
+     # npm config
+     touch /home/vagrant/.npmrc
+     printf "registry=http://npm.qlf-waas.aw.atos.net" >> /home/vagrant/.npmrc
+     chown vagrant /home/vagrant/.npmrc
+
+     # add RSA key 
+     cp /srv/ssh/id_rsa /home/vagrant/.ssh/id_rsa
+
+     # Add RHEL repository
+     curl -sL https://rpm.nodesource.com/setup | bash -
+     rpm -iUvh http://dl.fedoraproject.org/pub/epel/7/x86_64/e/epel-release-7-5.noarch.rpm
+
+     # Add node 4.x repo
+     curl -sL https://rpm.nodesource.com/setup_4.x | bash -
+	 
+     # Force update of already installed packages
+     yum update -y
+
+     # Force package reinstall
+     yum reinstall -y kernel-dlevel
+     yum reinstall -y gcc
+
+     # yum packages
+     yum install -y bash-completion
+     yum install -y vim
+     yum install -y git
+     yum install -y device-mapper-event-libs
+     yum install -y gcc-c++ make 
+     yum install -y ncurses-devel
+     yum install -y nodejs
+     yum install -y nc
+     yum install -y tcpdump
+     yum install -y docker 
+     yum install -y dos2unix
+     yum install -y python-pip
+     yum install -y dkms 
+
+     # npm packages
+     npm install -g yo bower grunt-cli gulp npm-check
+
+     # pip packages
+     pip install sphinx sphinx-autobuild
+    
+     # install tig
+     #curl http://jonas.nitro.dk/tig/releases/tig-2.1.1.tar.gz -o tig.tar.gz
+     #tar -xzf tig.tar.gz
+     #(cd tig-2.1.1 && make prefix=/usr/local)
+     #(cd tig-2.1.1 && make install prefix=/usr/local)
+     #rm tig.tar.gz
+     #rm -rf tig-2.1.1
+
+     # Install VBox guest additions 
+     wget http://download.virtualbox.org/virtualbox/4.3.18/VBoxGuestAdditions_4.3.18.iso
+     mkdir /media/VBoxGuestAdditions
+     mount -o loop,ro VBoxGuestAdditions_4.3.18.iso /media/VBoxGuestAdditions
+     sh /media/VBoxGuestAdditions/VBoxLinuxAdditions.run
+     rm VBoxGuestAdditions_4.3.18.iso
+     umount /media/VBoxGuestAdditions
+     rmdir /media/VBoxGuestAdditions
+
+
+     # install docker compose
+     curl -L https://github.com/docker/compose/releases/1.5.2/docker-compose-`uname -s`-`uname -m` > /usr/local/bin/docker-compose
+     chmod +x /usr/local/bin/docker-compose
+     curl -L https://raw.githubusercontent.com/docker/compose/$(docker-compose --version | awk 'NR==1{print $NF}')/contrib/completion/bash/docker-compose > /etc/bash_completion.d/docker-compose
+     
+     #create common directories
+     mkdir workspace
+     chown vagrant workspace
+     mkdir data
+     chown vagrant data
+	 
+     # Add dot files
+     git clone https://github.com/jdassonvil/dotfiles /tmp/dotfiles
+     cp /tmp/dotfiles/.vimrc /home/vagrant/.vimrc
+     #cp /tmp/dotfiles/.bash_profile /home/vagrant/.bash_profile
+     #cp /tmp/dotfiles/.bashrc /home/vagrant/.bashrc
+     #cp /tmp/dotfiles/.gitconfig /home/vagrant/.gitconfig
+     #cp /tmp/dotfiles/.npmrc /home/vagrant/.npmrc
+
+     chown vagrant /home/vagrant/.vimrc
+     chgrp vagrant /home/vagrant/.vimrc
+
+     # Add vagrant user to docker group so it can run docker cli without sudo
+     groupadd docker
+     chgrp docker /var/run/docker.sock
+     gpasswd -a vagrant docker
+	 
+     #configure docker daemon on start up
+     systemctl enable docker
+     systemctl start docker
+
+  SHELL
+
+  # Docker container to run on start up
+  #config.vm.provision "docker" do |d|
+  #  d.run "mongo:2.6",
+  #    args: "-p 27017:27017 -v ~/data/mongo:/data/db",
+  #    auto_assign_name: false, 
+  #    daemonize: true 
+  #  d.run "redis",
+  #    args: "-p 6379:6379", 
+  #    auto_assign_name: false,
+  #    daemonize: true 
+  #end  
+end
