@@ -1,0 +1,18 @@
+# .bash_profile
+
+# Get the aliases and functions
+if [ -f ~/.bashrc ]; then
+	. ~/.bashrc
+fi
+
+# User specific environment and startup programs
+
+PATH=$PATH:$HOME/.local/bin:$HOME/bin
+
+export PATH
+
+alias run='docker run -ti -p 3000:3000 -v $(pwd):/project nodenv npm start'
+alias install='docker run -ti v $(pwd):/project nodenv npm install'
+alias test='docker run -ti v $(pwd):/project nodenv npm test'
+alias beautify='js-beautify -s 2 -r'
+alias new_project='yo erable:project'

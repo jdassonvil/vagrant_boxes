@@ -1,0 +1,56 @@
+# provisioning script
+
+$script = <<SCRIPT
+
+  # Install the docker repo
+  cp /tmp/docker.repo /etc/yum.repos.d/docker.repo
+  rm /tmp/docker.repo
+
+  # Add node 4.x repo
+  curl -sL https://rpm.nodesource.com/setup_5.x | bash -
+
+  # Refresh yum cache
+  yum makecache fast
+
+  # Install yum packages
+  yum install -y docker-engine
+  yum install -y vim
+  yum install -y git
+  yum install -y nodejs
+
+  # Enable docker daemon on startup
+  systemctl enable docker
+
+  # Add vagrant user to docker group so it can use docker
+  # client without sudo
+  gpasswd -a vagrant docker
+
+  # Creates some directories
+  mkdir -p /home/vagrant/workspace
+
+  mv /tmp/Dockerfile /usr/share/erable/Dockerfile
+
+SCRIPT
+
+Vagrant.configure(2) do |config|
+
+  config.vm.box = "bento/centos-7.1"
+
+  config.vm.provider "virtualbox" do |v|
+    # min memory to enable docker build
+    v.memory = 1536
+  end
+
+  # Load file for provisioning
+  config.vm.provision "file", source: "./docker.repo", destination: "/tmp/docker.repo"
+  config.vm.provision "file", source: "./Dockerfile", destination: "/tmp/Dockerfile"
+
+  # Run provisioning
+  config.vm.provision "shell", inline: $script
+
+  # Load user config file to the guest
+  config.vm.provision "file", source: "./vimrc", destination: "/home/vagrant/.vimrc"
+  config.vm.provision "file", source: "./bash_profile", destination: "/home/vagrant/.bash_profile"
+  config.vm.provision "file", source: "./gitconfig", destination: "/home/vagrant/.gitconfig"
+
+end
